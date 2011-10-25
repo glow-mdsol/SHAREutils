@@ -32,7 +32,7 @@ class ContentReader(object):
         info = book.add_sheet('Information')
         info.write(0, 0, 'Variable Name', boldtype)
         for (f_idx, filename) in enumerate(sorted(self.files)):
-            info.write(0, f_idx + 1, filename)
+            info.write(0, f_idx + 1, filename, boldtype)
         for (idx, term) in enumerate(sorted(self.variable_names.values())):
             info.write(idx+1, 0, term.name)
             for filename in sorted(term.files):
@@ -50,8 +50,9 @@ class ContentReader(object):
         sheet_code = book.add_sheet('Codes')            
         sheet_code.write(0, 0, 'Variable Name', boldtype)
         for (f_idx, filename) in enumerate(sorted(self.files)):
-            sheet_code.write(0, f_idx + 1, filename)
+            sheet_code.write(0, f_idx + 1, filename, boldtype)
         for (idx, term) in enumerate(sorted(self.variable_names.values())):
+            sheet_code.write(idx+1, 0, term.name)
             for (filename, code) in term.codes.items():
                 offset = sorted(self.files).index(filename)
                 sheet_code.write(idx+1, offset + 1, code)
@@ -59,8 +60,9 @@ class ContentReader(object):
         sheet_def = book.add_sheet('Conflicting Definitions')            
         sheet_def.write(0, 0, 'Variable Name', boldtype)
         for (f_idx, filename) in enumerate(sorted(self.files)):
-            sheet_def.write(0, f_idx + 1, filename)
+            sheet_def.write(0, f_idx + 1, filename, boldtype)
         for (idx, term) in enumerate(sorted(self.variable_names.values())):
+            sheet_def.write(idx+1, 0, term.name)
             for (filename, definition) in term.definitions.items():
                 offset = sorted(self.files).index(filename)
                 sheet_def.write(idx+1, offset + 1, definition)
