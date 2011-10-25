@@ -13,8 +13,59 @@ import xlrd
 class CodeLoader(object):
     
     def __init__(self, options):
-        self.options = options
-        self.terminology = self._load_reference(self.options.reference)
+        if options.template:
+            self.terminology = self._load_template(options.template)
+        else:
+            self.terminology = self._load_reference(options.reference)
+        
+    def _load_template(self, filename):
+        """
+        Template has terminology in the 'Terms' sheet
+        """
+        terminology = {}
+        print 'Loading %s from Content Template' % filename
+        try:
+            workbook = xlrd.open_workbook(filename)
+                
+        except xlrd.biffh.XLRDError, e:
+            # use the xml reader
+            terminology = self._load_template_xml(filename)
+            return terminology
+        except IOError, e:
+            print 'Failed to open %s - %s' % (filename, e)
+            sys.exit(1)
+            
+        sheet = workbook.sheet_by_name('Terms')
+        print 'Loading %s' % sheet_name
+        for row in range(1, sheet.nrows):
+            content = sheet.row_values(row)
+            terminology[content[0].value] = content[1].value
+        print 'Loaded %s terms' % len(terminology)
+        return terminology
+
+    def _load_template_xml(self, filename):
+        """
+        use a different reader
+        """
+        try:
+            workbook = openpyxl.reader.excel.load_workbook(filename)
+        except Exception, e:
+            import traceback, sys
+            print 'Failed to open %s : %s' % (filename, e)
+            traceback.print_tb(sys.exc_info()[2])
+            return
+        terminology = {}
+        sheet = workbook.get_sheet_by_name('Terms')
+        for (idx, row) in enumerate(sheet.rows):
+            if idx == 0:
+                # ignore header
+                continue
+            if not row[0].value:
+                # blank rows
+                continue
+            terminology[row[0].value] = {None : ''}.get(row[1].value, row[1].value)
+        print 'Loaded %s terms' % len(terminology)
+        return terminology
         
     def _load_reference(self, filename):
         terminology = {}
@@ -95,7 +146,8 @@ class CodeLoader(object):
                 return
             for sheet_name in workbook.get_sheet_names():
             
-                if (not 'General' in sheet_name):
+                if not (sheet_name.startswith('General')
+                        or sheet_name.startswith('Generic')):
                     # Only look for headings in pages we don't care about
                     continue
                 sheet = workbook.get_sheet_by_name(sheet_name)
@@ -111,6 +163,9 @@ class CodeLoader(object):
                                 print ''
                                 continue
                             print self.terminology.get(this_row[0].value.strip(), '')
+                        else:
+                            # only process the first sheet
+                            return
                         
                         
                         
@@ -122,8 +177,15 @@ if __name__ == "__main__":
                       action='store',
                       dest='reference',
                       default='')
+    
+    parser.add_option('-t',
+                      metavar='FILE',
+                      action='store',
+                      dest='template',
+                      default='')
+    
     (opts, args) = parser.parse_args()
-    if not opts.reference:
+    if not ((opts.reference != '') ^ (opts.template != '') ):
         sys.exit()
     tk = CodeLoader(opts)
     for arg in args:
