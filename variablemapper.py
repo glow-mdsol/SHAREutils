@@ -57,7 +57,7 @@ class ContentReader(object):
                 offset = sorted(self.files).index(filename)
                 sheet_code.write(idx+1, offset + 1, code)
         
-        sheet_def = book.add_sheet('Conflicting Definitions')            
+        sheet_def = book.add_sheet('Definitions')            
         sheet_def.write(0, 0, 'Variable Name', boldtype)
         for (f_idx, filename) in enumerate(sorted(self.files)):
             sheet_def.write(0, f_idx + 1, filename, boldtype)
@@ -137,7 +137,7 @@ class ContentReader(object):
                 if si(row[0]).lower() == 'variable name':
                     headers = [si(x) for x in row]
                     # Found the row with the column headings                                                         
-                    for this_row_idx in range(row_idx, sheet.nrows):
+                    for this_row_idx in range(row_idx + 1, sheet.nrows):
                         this_row = sheet.row(this_row_idx)
                         if si(this_row[0]) == '':
                             continue
