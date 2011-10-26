@@ -76,6 +76,9 @@ class HeaderChecker(object):
                         # Found the row with the column headings                                                         
                         print '%s,%s' % (sheet_name.strip(), ','.join([x.value.strip() for x in row]))
 
+class ContentTemplate(object):
+    pass
+
 if __name__  == "__main__":
     import optparse
     parser = optparse.OptionParser('Read the headers out of the tabs in a SHARE spreadsheet and dump to cmd')
