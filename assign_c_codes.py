@@ -36,7 +36,6 @@ class CodeLoader(object):
             sys.exit(1)
             
         sheet = workbook.sheet_by_name('Terms')
-        print 'Loading %s' % sheet_name
         for row in range(1, sheet.nrows):
             content = sheet.row_values(row)
             terminology[content[0].value] = content[1].value
@@ -124,7 +123,6 @@ class CodeLoader(object):
                 sheet = workbook.sheet_by_name(sheet_name)
                 print 'Loading %s' % sheet_name
                 for row in range(sheet.nrows):
-                    
                     content = sheet.row_values(row)
                     if str(content[0]).strip().lower() == 'variable name':
                         # Found the row with the column headings
@@ -134,18 +132,15 @@ class CodeLoader(object):
                                 print ''
                             print self.terminology.get(content[0].strip(), '')
         else:
-
-            # Office 2003 or later xml format 
+            # Office 2003 or later xml format
             try:
                 workbook = openpyxl.reader.excel.load_workbook(filename)
             except Exception, e:
-                import traceback, sys
-            
+                import traceback
                 print 'Failed to open %s : %s' % (filename, e)
                 traceback.print_tb(sys.exc_info()[2])
                 return
             for sheet_name in workbook.get_sheet_names():
-            
                 if not (sheet_name.startswith('General')
                         or sheet_name.startswith('Generic')):
                     # Only look for headings in pages we don't care about
@@ -155,9 +150,9 @@ class CodeLoader(object):
                     if not row[0].value:
                         # blank rows
                         continue
-                
+
                     if row[0].value.strip().lower() == 'variable name':
-                        # Found the row with the column headings                                                         
+                        # Found the row with the column headings
                         for this_row in sheet.rows:
                             if (this_row[0].value == '' or this_row[0].value is None):
                                 print ''
@@ -166,9 +161,7 @@ class CodeLoader(object):
                         else:
                             # only process the first sheet
                             return
-                        
-                        
-                        
+
 if __name__ == "__main__":
     import optparse
     parser = optparse.OptionParser()
@@ -177,22 +170,17 @@ if __name__ == "__main__":
                       action='store',
                       dest='reference',
                       default='')
-    
     parser.add_option('-t',
                       metavar='FILE',
                       action='store',
                       dest='template',
                       default='')
-    
     (opts, args) = parser.parse_args()
-    if not ((opts.reference != '') ^ (opts.template != '') ):
+    if not ((opts.reference != '') ^ (opts.template != '')):
         sys.exit()
     tk = CodeLoader(opts)
     for arg in args:
-        import os
         if not os.path.splitext(arg)[1] in ['.xls', '.xlsx']:
             print 'Skipping %s' % arg
-            
         print 'Generating %s' % arg
         tk.dump_map(arg)
-
