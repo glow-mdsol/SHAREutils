@@ -30,16 +30,17 @@ class HeaderChecker(object):
         boldtype = xlwt.easyxf("font: bold on; align: wrap on, vert centre, horiz center")
         book = xlwt.Workbook()
         header_sheet = book.add_sheet('Headers by Book')
-        index = 0
+        index = 1
         print 'Creating Header Export Sheet'
+        header_sheet.write(0, 0, "File", boldtype)
+        header_sheet.write(0, 1, "Tab", boldtype)
         for template in self._files:
             ctemp = self._file_obs.get(template)
-            header_sheet.write(index, 0, template, boldtype)
-            index += 1
             for (idx, tab) in enumerate(ctemp.exported()):
-                header_sheet.write(index + idx, 0, tab[0], boldtype)
+                header_sheet.write(index + idx, 0, template, boldtype)
+                header_sheet.write(index + idx, 1, tab[0], boldtype)
                 for c_idx in range(1, len(tab)):
-                    header_sheet.write(index + idx, c_idx, tab[c_idx])
+                    header_sheet.write(index + idx, c_idx + 1, tab[c_idx])
             else:
                 index += (idx + 1) 
         print 'Creating Header Definition Sheet'
