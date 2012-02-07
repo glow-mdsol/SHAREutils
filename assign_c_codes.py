@@ -18,6 +18,7 @@ import xlwt
 """
 Extract content from an unknown state
 """
+
 def si(content):
     """
     If it gets a None, return '', else return cleaned string
@@ -46,6 +47,11 @@ MAPPING_CODES = {'Mapping to BRIDG Defined Class' : 'BRIDG Defined Class C-Code'
                  'ISO 21090 Datatype' :	'ISO 21090 Datatype C-Code',
                  'ISO 21090 Datatype Constraint' : 'ISO 21090 Datatype Constraint C-Code'}
 
+MAPPING_ORDER = ['Variable Name', 'Mapping to BRIDG Defined Class', 'Mapping to BRIDG Defined Class Attribute',
+                 'Mapping to BRIDG Performed Class', 'Mapping to BRIDG Performed Class Attribute',
+                 'Mapping to BRIDG Non-defined/Non-performed Class', 'Mapping to BRIDG Non-defined/Non-performed Class Attribute',
+                 'ISO 21090 Datatype', 'ISO 21090 Datatype Constraint']
+
 class CodeLoader(object):
     
     def __init__(self, options):
@@ -62,7 +68,6 @@ class CodeLoader(object):
         print 'Loading %s from Content Template' % filename
         try:
             workbook = xlrd.open_workbook(filename)
-                
         except xlrd.biffh.XLRDError, e:
             # use the xml reader
             terminology = self._load_template_xml(filename)
@@ -70,11 +75,13 @@ class CodeLoader(object):
         except IOError, e:
             print 'Failed to open %s - %s' % (filename, e)
             sys.exit(1)
-            
-        sheet = workbook.sheet_by_name('Terms')
-        for row in range(1, sheet.nrows):
-            content = sheet.row_values(row)
-            terminology[content[0].value] = content[1].value
+        if 'Fields to be Coded' in workbook.sheet_names():
+            terminology = self._load_unique_items_to_code(workbook)
+        else:
+            sheet = workbook.sheet_by_name('Terms')
+            for row in range(1, sheet.nrows):
+                content = sheet.row_values(row)
+                terminology[si(content[0])] = si(content[1])
         print 'Loaded %s terms' % len(terminology)
         return terminology
 
@@ -90,16 +97,65 @@ class CodeLoader(object):
             traceback.print_tb(sys.exc_info()[2])
             return
         terminology = {}
-        sheet = workbook.get_sheet_by_name('Terms')
-        for (idx, row) in enumerate(sheet.rows):
-            if idx == 0:
-                # ignore header
-                continue
-            if not row[0].value:
-                # blank rows
-                continue
-            terminology[row[0].value] = {None : ''}.get(row[1].value, row[1].value)
+        if 'Fields to be Coded' in workbook.get_sheet_names():
+            terminology = self._load_unique_items_to_code(workbook)
+        else:    
+            sheet = workbook.get_sheet_by_name('Terms')
+            for (idx, row) in enumerate(sheet.rows):
+                if idx == 0:
+                    # ignore header
+                    continue
+                if not si(row[0]):
+                    # blank rows
+                    continue
+                terminology[si(row[0])] = {None : ''}.get(si(row[1]), si(row[1]))
         print 'Loaded %s terms' % len(terminology)
+        return terminology
+
+    def _load_unique_items_to_code(self, workbook):
+        """
+        Load in the terms
+        TODO: Refactor this!!
+        """
+        terminology = {}
+        if isinstance(workbook, openpyxl.workbook.Workbook):
+            for sheet_name in ('Fields to be Coded', 'Fields Coded'):
+                sheet = workbook.get_sheet_by_name(sheet_name)
+                for (idx, content) in enumerate(sheet.rows):
+                    if idx == 0:
+                        # ignore header
+                        continue
+                    if not si(content[0]):
+                        # blank rows
+                        continue
+                    if '|' in si(content[0]):
+                        # multiple terms, split 'em
+                        terms = [x.strip() for x in si(content[0]).split('|')]
+                        values = [x.strip() for x in si(content[1]).split('|')]
+                        if not len(terms) == len(values):
+                            print 'Error in mapping: %s => %s (Not a match in numbers)' % (si(content[0]), si(content[1]))
+                        else:
+                            terminology.update(dict(zip(terms, values)))
+                        pass
+                    else:
+                        # Map a 'None' to ''
+                        terminology[si(content[0])] = {None : '',
+                                                       'None' : ''}.get(si(content[1]), si(content[1]))
+            
+        else:
+            for sheet_name in ('Fields to be Coded', 'Fields Coded'):
+                sheet = workbook.sheet_by_name(sheet_name)
+                for row in range(1, sheet.nrows):
+                    content = sheet.row_values(row)
+                    if '|' in si(content[0]):
+                        terms = [x.strip() for x in si(content[0]).split('|')]
+                        values = [x.strip() for x in si(content[1]).split('|')]
+                        if not len(terms) == len(values):
+                            print 'Error in mapping: %s => %s (Not a match in numbers)' % (si(content[0]), si(content[1]))
+                        else:
+                            terminology.update(dict(zip(terms, values)))
+                    else:
+                        terminology[si(content[0])] = {None : '', 'None' : ''}.get(si(content[1]), si(content[1]))
         return terminology
         
     def _load_reference(self, filename):
@@ -140,99 +196,70 @@ class CodeLoader(object):
                     else:
                         return terminology
 
+    def column_sort(self, cola, colb):
+        return cmp(MAPPING_ORDER.index(cola), MAPPING_ORDER.index(colb))
+                   
     def dump_map(self, filename):
         coded_columns = MAPPING_CODES.keys()
-        boldtype = xlwt.easyxf("font: bold on; align: wrap on, vert centre, horiz center")
+        boldtype = xlwt.easyxf("font: bold on; align: wrap on, vert center, horiz center; borders: left 1, top 1, bottom 1, right 1;")
+        borderedtype = xlwt.easyxf("borders: left 1, top 1, bottom 1, right 1;")
         try:
             coded = xlwt.Workbook()
         except xlwt.Exception:
             print "Can't output"
             sys.exit()
-        if os.path.splitext(filename)[1] == '.xls':
-            try:
-                workbook = xlrd.open_workbook(filename)
-                # Output folder
-            except Exception, e:
-                print 'Failed to open %s - %s' % (filename, e)
-                return
-            
-            for sheet_name in workbook.sheet_names():
-                if ('Rules' in sheet_name or 
-                    'Decision' in sheet_name or 
-                    'Terminology' in sheet_name or 
-                    'Null' in sheet_name):
-                    # Don't look for headings in pages that we don't care about
-                    continue
-
-                sheet = workbook.sheet_by_name(sheet_name)
-                coded_tab = coded.add_sheet(sheet_name)
-                for row in range(sheet.nrows):
-                    content = [si(x) for x in sheet.row_values(row)]
-                    if str(content[0]).lower() == 'variable name':
-                        headers = [si(x) for x in sheet.row_values(row)]
-                        # Define the mapped headers
-                        overlap = set(headers).intersection(set(coded_columns))
-                        # Write the headers for the coded columns
-                        for (idx, col) in enumerate(overlap):
-                            coded_tab.write(0, idx + 1, MAPPING_CODES.get(col), boldtype)
-                        # Iterate from the variable_name row forward
-                        for (offset_row, this_row) in enumerate(range(row, sheet.nrows)):
-                            # Put the content into a dictionary
-                            mapped_content = dict(zip(headers, [si(x) for x in sheet.row_values(this_row)]))
-                            # if the first column is blank, skip
-                            if mapped_content.get('Variable Name') in ['', None]:
-                                continue
-                            # Write the Variable as a Pivot
-                            coded_tab.write(offset_row, 0, mapped_content.get('Variable Name'))
-                            for (idx, col) in enumerate(overlap):
-                                if mapped_content.get(col) not in [None, '', 'na']:
-                                    coded_tab.write(offset_row, idx + 1,
-                                                self.terminology.get(mapped_content.get(col), ''))
-        else:
             # Office 2003 or later xml format
-            try:
-                workbook = openpyxl.reader.excel.load_workbook(filename)
-            except Exception, e:
-                import traceback
-                print 'Failed to open %s : %s' % (filename, e)
-                traceback.print_tb(sys.exc_info()[2])
-                return
-            for sheet_name in workbook.get_sheet_names():
-                if ('Rules' in sheet_name or 
-                    'Decision' in sheet_name or 
-                    'Terminology' in sheet_name or 
-                    'Null' in sheet_name):
-                    # Only look for headings in pages we don't care about
+        try:
+            workbook = openpyxl.reader.excel.load_workbook(filename)
+        except Exception, e:
+            import traceback
+            print 'Failed to open %s : %s' % (filename, e)
+            traceback.print_tb(sys.exc_info()[2])
+            return
+        for sheet_name in workbook.get_sheet_names():
+            if ('Rules' in sheet_name or 
+                'Decision' in sheet_name or 
+                'Terminology' in sheet_name or
+                'README' in sheet_name or
+                'Null' in sheet_name):
+                # Only look for headings in pages we don't care about
+                continue
+            coded_tab = coded.add_sheet(sheet_name)
+            sheet = workbook.get_sheet_by_name(sheet_name)
+            for (offset, row) in enumerate(sheet.rows, 1):
+                if not si(row[0]):
+                    # blank rows
                     continue
-                coded_tab = coded.add_sheet(sheet_name)
-                sheet = workbook.get_sheet_by_name(sheet_name)
-                for (offset, row) in enumerate(sheet.rows):
-                    if not si(row[0].value):
-                        # blank rows
-                        continue
-
-                    if si(row[0]).lower() == 'variable name':
-                        # Found the row with the column headings
-                        headers = [si(x) for x in row]
-                        # Define the mapped headers
-                        overlap = set(headers).intersection(set(coded_columns))
-                        # Write the headers for the coded columns
-                        for (idx, col) in enumerate(overlap):
-                            coded_tab.write(0, idx + 1, MAPPING_CODES.get(col), boldtype)
+                # look where to start coding
+                if si(row[0]).lower() == 'variable name':
+                    # Found the row with the column headings
+                    headers = [si(x) for x in row]
+                    # Define the mapped headers
+                    overlap = sorted(set(headers).intersection(set(coded_columns)), cmp=self.column_sort)
+                    # Write the headers for the coded columns
+                    for (idx, col) in enumerate(overlap, 1):
+                        coded_tab.write(0, idx, MAPPING_CODES.get(col), boldtype)
                         # Iterate from the variable_name row forward
-                        for (offset_row, this_row) in enumerate(sheet.rows[offset:]):
-                            # Put the content into a dictionary
-                            mapped_content = dict(zip(headers, [si(x) for x in this_row]))
-                            # if the first column is blank, skip
-                            if mapped_content.get('Variable Name') in ['', None]:
-                                continue
-                            # Write the Variable as a Pivot
-                            coded_tab.write(offset_row, 0, mapped_content.get('Variable Name'))
-                            for (idx, col) in enumerate(overlap):
-                                if mapped_content.get(col) not in [None, '', 'na']:
-                                    coded_tab.write(offset_row, idx + 1,
-                                                self.terminology.get(mapped_content.get(col), ''))
-        coded.save("%s_CODED%s" % (os.path.splitext(filename)[0], os.path.splitext(filename)[0]))
+                    for (offset_row, this_row) in enumerate(sheet.rows[offset:], 1):
+                        # Put the content into a dictionary
+                        mapped_content = dict(zip(headers, [si(x) for x in this_row]))
+                        # if the first column is blank, skip
+                        if mapped_content.get('Variable Name') in ['', None]:
+                            continue
+                        # Write the Variable as a Pivot
+                        coded_tab.write(offset_row, 0, mapped_content.get('Variable Name'), borderedtype)
+                        for (idx, col) in enumerate(overlap, 1):
+                            if mapped_content.get(col) not in [None, '', 'na']:
+                                if '|' in mapped_content.get(col):
+                                    # Multi-value columns
+                                    terms = [x.strip() for x in mapped_content.get(col).split('|')]
+                                    codes = [self.terminology.get(x, '') for x in terms]
+                                    coded_tab.write(offset_row, idx,
+                                                    ' | '.join(codes), borderedtype)
+                                else:
+                                    coded_tab.write(offset_row, idx,
+                                                    self.terminology.get(mapped_content.get(col, ""), ''), borderedtype)
+        coded.save("%s_CODED.xls" % (os.path.splitext(filename)[0]))
 
 def template_sort(x, y):
     """
@@ -586,11 +613,13 @@ if __name__ == "__main__":
     import optparse
     parser = optparse.OptionParser()
     parser.add_option('-r',
+                      help="Reference File",
                       metavar='FILE',
                       action='store',
                       dest='reference',
                       default='')
     parser.add_option('-t',
+                      help="Template File",
                       metavar='FILE',
                       action='store',
                       dest='template',
@@ -613,3 +642,4 @@ if __name__ == "__main__":
             print 'Skipping %s' % arg
         print 'Generating %s' % arg
         tk.dump_map(arg)
+
