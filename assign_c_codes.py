@@ -202,7 +202,7 @@ class CodeLoader(object):
     def dump_map(self, filename):
         coded_columns = MAPPING_CODES.keys()
         boldtype = xlwt.easyxf("font: bold on; align: wrap on, vert center, horiz center; borders: left 1, top 1, bottom 1, right 1;")
-        borderedtype = xlwt.easyxf("borders: left 1, top 1, bottom 1, right 1;")
+        borderedtype = xlwt.easyxf("borders: left 1, top 1, bottom 1, right 1; align: vert top, horiz left;")
         try:
             coded = xlwt.Workbook()
         except xlwt.Exception:
@@ -342,7 +342,7 @@ class CodeExtractor(object):
         idx = 1
         for item in all_items:
             if item.conflicts:
-                print "%s is conflicted: %s" %(item.name, item.coded)
+                print "%s is conflicted: %s" % (item.name, item.coded)
                 from operator import itemgetter
                 # Item Name
                 toresolve.write(idx+1, 0, item.name)
@@ -492,11 +492,19 @@ class CodeExtractor(object):
                         if not _name:
                             continue
                         for (c_key, c_code) in couples.iteritems():
-                            sourcecol = _content.get(c_key)
-                            codecol = _content.get(c_code)
-                            if not sourcecol in [None, "", "na"]:
-                                item = self.coded_entries.setdefault(sourcecol, CodedEntry(sourcecol))
-                                item.add_code(c_key, codecol, filename)
+                            try:
+                                sourcecols = [x.strip() for x in _content.get(c_key).split('|')]
+                                codecols = [x.strip() for x in _content.get(c_code).split('|')]
+                            except AttributeError:
+                                continue
+                            for (c_indx, sourcecol) in enumerate(sourcecols):
+                                if not sourcecol in [None, "", "na"]:
+                                    item = self.coded_entries.setdefault(sourcecol, CodedEntry(sourcecol))
+                                    try:
+                                        item.add_code(c_key, codecols[c_indx], filename)
+                                    except IndexError:
+                                        item.add_code(c_key, "", filename)
+
 
 class CodedEntry(object):
     """
@@ -537,6 +545,7 @@ class CodedEntry(object):
             if _code == "":
                 return
             if current != _code:
+                print "Redefinition of %s" % self.name
                 # do something
                 spl = current.split(',')
                 if not _code in spl:
