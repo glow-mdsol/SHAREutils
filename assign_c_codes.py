@@ -45,12 +45,26 @@ MAPPING_CODES = {'Mapping to BRIDG Defined Class' : 'BRIDG Defined Class C-Code'
                  'Mapping to BRIDG Non-defined/Non-performed Class Attribute' : 'BRIDG Non-defined/Non-performed Class Attribute C-Code',
                  'Variable Name' : 'Variable Name C-Code',
                  'ISO 21090 Datatype' :	'ISO 21090 Datatype C-Code',
-                 'ISO 21090 Datatype Constraint' : 'ISO 21090 Datatype Constraint C-Code'}
+                 'ISO 21090 Datatype Constraint' : 'ISO 21090 Datatype Constraint C-Code',
+                 'Description of Observation, ObservationResult or Activity or Relationship - CODED VALUES' : 'Description of Observation, ObservationResult or Activity or Relationship - CODED VALUES C-Code'}
 
 MAPPING_ORDER = ['Variable Name', 'Mapping to BRIDG Defined Class', 'Mapping to BRIDG Defined Class Attribute',
                  'Mapping to BRIDG Performed Class', 'Mapping to BRIDG Performed Class Attribute',
                  'Mapping to BRIDG Non-defined/Non-performed Class', 'Mapping to BRIDG Non-defined/Non-performed Class Attribute',
-                 'ISO 21090 Datatype', 'ISO 21090 Datatype Constraint']
+                 'ISO 21090 Datatype', 'ISO 21090 Datatype Constraint', 'Description of Observation, ObservationResult or Activity or Relationship - CODED VALUES']
+
+def vsort(this, that):
+    """
+    Variable name sort
+    """
+    if this.startswith('--') and that.startswith('--'):
+        return cmp(this[2:].lower(), that[2:].lower())
+    elif this.startswith('--'):
+        return cmp(this[1:].lower(), that.lower())
+    elif that.startswith('--'):
+        return cmp(this.lower(), that[1:].lower())
+    else:
+        return cmp(this.lower(), that.lower())
 
 class CodeLoader(object):
     
@@ -615,7 +629,14 @@ class CodedEntry(object):
                     return i
 
     def __cmp__(self, other):
-        return cmp(self.name, other.name)
+        if self.name.startswith('--') and other.name.startswith('--'):
+            return cmp(self.name[2:].lower(), other.name[2:].lower())
+        elif self.name.startswith('--'):
+            return cmp(self.name[2:].lower(), other.name.lower())
+        elif other.name.startswith('--'):
+            return cmp(self.name.lower(), other.name[2:].lower())
+        else:
+            return cmp(self.name.lower(), other.name.lower())
 
 if __name__ == "__main__":
 
