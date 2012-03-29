@@ -5,7 +5,7 @@ import sys
 import openpyxl
 import xlrd
 import xlwt
-
+import time
 
 class ContentReader(object):
 
@@ -16,8 +16,6 @@ class ContentReader(object):
     def load_spreadsheet(self, filename):
         if os.path.splitext(filename)[1] not in ['.xlsx', '.xls']:
             print 'Ignoring %s' % filename
-            return
-        if not filename.startswith('2011'):
             return
         print 'Opening %s' % filename
         self.files.append(filename)
@@ -42,11 +40,11 @@ class ContentReader(object):
         sheet = book.add_sheet('Terms')
         sheet.write(0, 0, 'Variable Name', boldtype)
         sheet.write(0, 1, 'Code', boldtype)
-        sheet.write(0, 2, 'Definition', boldtype)
+        #sheet.write(0, 2, 'Definition', boldtype)
         for (idx, term) in enumerate(sorted(self.variable_names.values())):
             sheet.write(idx + 1, 0, term.name)
             sheet.write(idx + 1, 1, term.code)
-            sheet.write(idx + 1, 2, term.definition)
+            #sheet.write(idx + 1, 2, term.definition)
 
         sheet_code = book.add_sheet('Codes')
         sheet_code.write(0, 0, 'Variable Name', boldtype)
@@ -58,18 +56,64 @@ class ContentReader(object):
                 offset = sorted(self.files).index(filename)
                 sheet_code.write(idx + 1, offset + 1, code)
 
-        sheet_def = book.add_sheet('Definitions')
-        sheet_def.write(0, 0, 'Variable Name', boldtype)
-        for (f_idx, filename) in enumerate(sorted(self.files)):
-            sheet_def.write(0, f_idx + 1, filename, boldtype)
-        for (idx, term) in enumerate(sorted(self.variable_names.values())):
-            sheet_def.write(idx + 1, 0, term.name)
-            for (filename, definition) in term.definitions.items():
-                offset = sorted(self.files).index(filename)
-                sheet_def.write(idx + 1, offset + 1, definition)
-        import time
+        # sheet_def = book.add_sheet('Definitions')
+        # sheet_def.write(0, 0, 'Variable Name', boldtype)
+        # for (f_idx, filename) in enumerate(sorted(self.files)):
+        #     sheet_def.write(0, f_idx + 1, filename, boldtype)
+        # for (idx, term) in enumerate(sorted(self.variable_names.values())):
+        #     sheet_def.write(idx + 1, 0, term.name)
+        #     for (filename, definition) in term.definitions.items():
+        #         offset = sorted(self.files).index(filename)
+        #         sheet_def.write(idx + 1, offset + 1, definition)
+
         book.save('SHARE_Combined_Variables_%s.xls' % time.strftime('%Y%m%d'))
 
+    def variable_report(self):
+        boldtype = xlwt.easyxf("font: bold on; align: wrap on, vert centre, horiz center")
+        wrappable = xlwt.easyxf("align: wrap on, vert top, horiz left")
+        book = xlwt.Workbook()
+        # create the location sheet (where in all the files I've opened is the fragment)
+        info = book.add_sheet('Variable Locations')
+        info.write(0, 0, "Variable", boldtype)
+        _sf = sorted(self.files)
+        for (colidx, filename) in enumerate(_sf, 1):
+            info.write(0, colidx, filename, boldtype)
+        _sv = sorted(self.variable_names.values())
+        for (rowidx, variable) in enumerate(_sv, 1):
+            info.write(rowidx, 0, variable.name)
+            for filename in variable.filenames:
+                info.write(rowidx, _sf.index(filename) + 1, "X")
+        # next the definitions
+        defs = book.add_sheet('Variable Definitions')
+        for idx in range(1, 9):
+            if idx % 2 == 0:
+                defs.write(0, idx, 'Locations', boldtype)
+            else:
+                defs.write(0, idx, 'Generic Definition', boldtype)
+            defs.col(idx).width = 256 * 35
+        defs.write(0, 0, "Variable Name", boldtype)
+        for (rowidx, variable) in enumerate(_sv, 1):
+            defs.write(rowidx, 0, variable.name)
+            for (colidx, (definition, locations)) in enumerate(variable.definitions.iteritems(), 1):
+                defs.write(rowidx, ((2 * colidx) - 1), definition, wrappable)
+                defs.write(rowidx, ((2 * colidx)), ';'.join(sorted([os.path.splitext(x)[0] for x in locations])), wrappable)
+        
+        # then the labels
+        labs = book.add_sheet('Variable Labels')
+        for idx in range(1, 7):
+            labs.col(idx).width = 256 * 35
+            if idx % 2 == 0:
+                labs.write(0, idx, 'Locations', boldtype)
+            else:
+                labs.write(0, idx, 'Label', boldtype)
+        labs.write(0, 0, "Variable Name", boldtype)
+        for (rowidx, variable) in enumerate(_sv, 1):
+            labs.write(rowidx, 0, variable.name)
+            for (colidx, (label, locations)) in enumerate(variable.labels.iteritems(), 1):
+                labs.write(rowidx, ((2 * colidx) - 1), label, wrappable)
+                labs.write(rowidx, ((2 * colidx)), ';'.join(sorted([os.path.splitext(x)[0] for x in locations])), wrappable)
+        book.save('SHARE_Variable_Report_%s.xls' % time.strftime('%Y%m%d'))
+        
     def _xlsx_loader(self, filename):
         """
         Using pyopenxl
@@ -164,21 +208,38 @@ def si(content):
 
 
 class VariableName(object):
-
+    
     def __init__(self, name):
         # pass in the row as a dictionary agin the headers
         self.name = name
-        self.definitions = {}
-        self.codes = {}
-        self.files = []
+        self._definitions = {}
+        self._labels = {}
+        self._codes = {}
 
+    def _collate_items(self, items):
+        """
+        group items that are the same together
+        """
+        collated = {}
+        for (filename, item) in items.iteritems():
+            collated.setdefault(item, []).append(filename)
+        return collated
+
+    @property
+    def filenames(self):
+        return set(self._labels.keys() + self._definitions.keys() + self._codes.keys())
+    
+    @property
+    def labels(self):
+        return self._collate_items(self._labels)
+
+    @property
+    def definitions(self):
+        return self._collate_items(self._definitions)
+                                                 
     @property
     def code(self):
-        return ','.join(dict().fromkeys(self.codes.values()).keys())
-
-    @property
-    def definition(self):
-        return ','.join(dict().fromkeys(self.definitions.values()).keys())
+        return ','.join(dict().fromkeys(self._codes.values()).keys())
 
     def __cmp__(self, other):
         if self.name.startswith('--') or other.name.startswith('--'):
@@ -191,21 +252,23 @@ class VariableName(object):
                     return 1
         return cmp(self.name, other.name)
 
+    @property
+    def locations(self):
+        return set(self._labels.keys() + self._definitions.keys() + self._codes.keys())
+    
     def load_row(self, row, filename):
-        # keep track of where things come from
-        if not filename in self.files:
-            self.files.append(filename)
         # pattern match on the keys for the definitions and c-codes (variable names)
         keys = row.keys()
         code = self._has_codes(keys)
-
         if code:
             _code = row.get(code)
-            self.codes[filename] = _code
+            self._codes[filename] = _code
         definition = self._has_definition(keys)
-        if definition:
-            _definition = row.get(definition)
-            self.definitions[filename] = _definition
+        if definition != '':
+            self._definitions[filename] = row.get(definition)
+        label = self._has_label(keys)
+        if label != '':
+            self._labels[filename] = row.get(label)
 
     def _has_codes(self, keys):
         """
@@ -225,9 +288,19 @@ class VariableName(object):
                 return key
         return ''
 
+    def _has_label(self, keys):
+        """
+        Keys are the dict keys
+        """
+        for key in keys:
+            if 'label' in key.lower():
+                return key
+        return ''
+
 if __name__ == "__main__":
     import glob
     vmap = ContentReader()
-    for excel in glob.glob("*.xls*"):
+    for excel in glob.glob("201*.xls*"):
         vmap.load_spreadsheet(excel)
-    vmap.export_content()
+        #vmap.export_content()
+    vmap.variable_report()
