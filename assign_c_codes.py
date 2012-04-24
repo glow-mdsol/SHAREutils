@@ -36,22 +36,64 @@ def si(content):
             return unicode(content.value).strip()
     return unicode(content).strip()
 
-# General Dictionary of codes to 
+# General Dictionary of codes to columns
 MAPPING_CODES = {'Mapping to BRIDG Defined Class' : 'BRIDG Defined Class C-Code',
                  'Mapping to BRIDG Defined Class Attribute' : 'BRIDG Defined Class Attribute C-Code',
                  'Mapping to BRIDG Performed Class' : 	'BRIDG Performed Class C-Code',
                  'Mapping to BRIDG Performed Class Attribute' : 'BRIDG Performed Class Attribute C-Code',
                  'Mapping to BRIDG Non-defined/Non-performed Class' : 'BRIDG Non-defined/Non-performed Class C-Code',
                  'Mapping to BRIDG Non-defined/Non-performed Class Attribute' : 'BRIDG Non-defined/Non-performed Class Attribute C-Code',
+                 'Mapping to BRIDG Planned Class' : 'BRIDG Planned Class C-Code',
+                 'Mapping to BRIDG Planned Class Attribute' : 'BRIDG Planned Class Attribute C-Code',
                  'Variable Name' : 'Variable Name C-Code',
                  'ISO 21090 Datatype' :	'ISO 21090 Datatype C-Code',
                  'ISO 21090 Datatype Constraint' : 'ISO 21090 Datatype Constraint C-Code',
                  'Description of Observation, ObservationResult or Activity or Relationship - CODED VALUES' : 'Description of Observation, ObservationResult or Activity or Relationship - CODED VALUES C-Code'}
 
-MAPPING_ORDER = ['Variable Name', 'Mapping to BRIDG Defined Class', 'Mapping to BRIDG Defined Class Attribute',
-                 'Mapping to BRIDG Performed Class', 'Mapping to BRIDG Performed Class Attribute',
-                 'Mapping to BRIDG Non-defined/Non-performed Class', 'Mapping to BRIDG Non-defined/Non-performed Class Attribute',
-                 'ISO 21090 Datatype', 'ISO 21090 Datatype Constraint', 'Description of Observation, ObservationResult or Activity or Relationship - CODED VALUES']
+MAPPING_ORDER = [u'Variable Name',
+                 u'Variable Name C-Code',
+                 u'Variable Label',
+                 u'SHARE Generic Definition',
+                 u'SDTM IG 3.1.2',
+                 u'SEND 3.0',
+                 u'CDASH V1.1',
+                 u'CDASH V1.1 Conceptual Datatype',
+                 u'SDTM IG 3.1.2 Datatype',
+                 u'Codelist Master',
+                 u'Set of Valid Values',
+                 u'Assigned Value',
+                 u'Mapping to BRIDG Defined Class',
+                 u'Mapping to BRIDG Defined Class Attribute',
+                 u'BRIDG Defined Class C-Code',
+                 u'BRIDG Defined Class Attribute C-Code',
+                 u'Mapping to BRIDG Performed Class',
+                 u'Mapping to BRIDG Performed Class Attribute',
+                 u'BRIDG Performed Class C-Code',
+                 u'BRIDG Performed Class Attribute C-Code',
+                 u'Mapping to BRIDG Non-defined/Non-performed Class',
+                 u'Mapping to BRIDG Non-defined/Non-performed Class Attribute',
+                 u'BRIDG Non-defined/Non-performed Class C-Code',
+                 u'BRIDG Non-defined/Non-performed Class Attribute C-Code',
+                 u'Mapping to BRIDG Planned Class',
+                 u'Mapping to BRIDG Planned Class Attribute',
+                 u'BRIDG Planned Class C-Code',
+                 u'BRIDG Planned Class Attribute C-Code',
+                 u'ISO 21090 Datatype',
+                 u'ISO 21090 Datatype C-Code',
+                 u'ISO 21090 Datatype Component',
+                 u'AsCollectedIndicator',
+                 u'Observation, ObservationResult, Activity, Relationship',
+                 u'Description of Observation, ObservationResult or Activity or Relationship - CODED VALUES',
+                 u'Description of Observation, ObservationResult or Activity or Relationship - C-Codes',
+                 u'Description of Observation, ObservationResult or Activity or Relationship - NON-CODED VALUES',
+                 u'NOTES',
+                 u'Null flavors',
+                 u'Boolean Mapping',
+                 u'ISO 21090 Datatype Constraint',
+                 u'ISO 21090 Datatype Constraint C-Code',
+                 u'ISO 21090 Datatype Constraint Attribute',
+                 u'Observation or Activity'
+                 ]
 
 def vsort(this, that):
     """
@@ -179,11 +221,10 @@ class CodeLoader(object):
         try:
             workbook = openpyxl.reader.excel.load_workbook(filename)
         except Exception, e:
-            import traceback, sys
-            
-            print 'Failed to open %s : %s' % (filename, e)
-            traceback.print_tb(sys.exc_info()[2])
-            return
+            print 'Failed to open %s : %s (Strike 1)' % (filename, e)
+            # use the xlrd module
+            terminology = self._load_reference_xls(filename)
+            return terminology
         for sheet_name in workbook.get_sheet_names():
             
             if (not 'Generic' in sheet_name):
@@ -196,6 +237,7 @@ class CodeLoader(object):
                     continue
                 
                 if row[0].value.strip().lower() == 'variable name':
+
                     # Found the row with the column headings                                                         
                     for this_row in sheet.rows[idx + 1:]:
                         if this_row[0].value == '' or this_row[0].value is None:
@@ -209,6 +251,43 @@ class CodeLoader(object):
                             terminology[str(this_row[0].value).strip()] = str(this_row[1].value).strip()
                     else:
                         return terminology
+
+    def _load_reference_xls(self, filename):
+        terminology = {}
+        # Office 2003 or later xml format 
+        print 'Loading %s as a reference' % filename
+        try:
+            workbook = xlrd.open_workbook(filename)
+        except Exception, e:
+            print 'Failed to open %s : %s (Last chance!!)' % (filename, e)
+            sys.exit(1)
+        for sheet_name in workbook.get_sheet_names():
+            
+            if (not 'Generic' in sheet_name):
+                # Only look for headings in pages we don't care about
+                continue
+            sheet = workbook.get_sheet_by_name(sheet_name)
+            for (idx, row) in enumerate(sheet.rows):
+                if not row[0].value:
+                    # blank rows
+                    continue
+                
+                if row[0].value.strip().lower() == 'variable name':
+
+                    # Found the row with the column headings                                                         
+                    for this_row in sheet.rows[idx + 1:]:
+                        if this_row[0].value == '' or this_row[0].value is None:
+                            continue
+                        if this_row[1].value is None:
+                            print 'C-code required for %s' % this_row[0].value.strip()
+                            terminology[str(this_row[0].value).strip()] = ''
+                        else:
+                            if str(this_row[1].value).strip() in terminology.items():
+                                print 'Duplicated C-code: %s' % str(this_row[1].value).strip()
+                            terminology[str(this_row[0].value).strip()] = str(this_row[1].value).strip()
+                    else:
+                        return terminology
+        
 
     def column_sort(self, cola, colb):
         return cmp(MAPPING_ORDER.index(cola), MAPPING_ORDER.index(colb))
@@ -353,17 +432,16 @@ class CodeExtractor(object):
         toresolve = book.add_sheet('Fields to be Resolved')
         toresolve.write(0, 0, "Field", boldtype)
         toresolve.write(0, 1, "Codes", boldtype)
-        idx = 1
-        for item in all_items:
+        for (idx, item) in enumerate(all_items, 1):
             if item.conflicts:
                 print "%s is conflicted: %s" % (item.name, item.coded)
                 from operator import itemgetter
                 # Item Name
-                toresolve.write(idx+1, 0, item.name)
-                _codes = sorted(item.coded, key=itemgetter(2))
+                toresolve.write(idx, 0, item.name)
+                _codes = sorted(item.coded, key=itemgetter(1))
                 for (c_ind, (cf, va)) in enumerate(_codes):
-                    toresolve.write(idx+1, (c_ind*2)+1, cf)
-                    toresolve.write(idx+1, (c_ind*2)+2, va)
+                    toresolve.write(idx, (c_ind*2)+1, cf)
+                    toresolve.write(idx, (c_ind*2)+2, va)
 
         """
         Fields that have no code assigned anywhere
@@ -371,13 +449,12 @@ class CodeExtractor(object):
         nocode = book.add_sheet('Fields Coded')
         nocode.write(0, 0, "Field", boldtype)
         nocode.write(0, 1, "Code", boldtype)
-        idx = 1
-        for item in all_items:
+        coded_state = [x for x in all_items if not (x.uncoded or x.conflicts)]
+        for (idx, item) in enumerate(coded_state, 1):
             if item.uncoded or item.conflicts:
                 continue
             nocode.write(idx, 0, item.name)
             nocode.write(idx, 1, item.coded)
-            idx = idx + 1
         """
         Instances
         """
@@ -388,12 +465,12 @@ class CodeExtractor(object):
         # Write out the file names
         for (idx, holder) in enumerate(all_sections):
             instances.write(0, 2 + idx, holder, boldtype)  
-        for (idx, item) in enumerate(sorted(all_items)):
-            instances.write(idx + 1, 0, item.name)
-            instances.write(idx + 1, 1, item.context)
+        for (idx, item) in enumerate(sorted(all_items), 1):
+            instances.write(idx, 0, item.name)
+            instances.write(idx, 1, item.context)
             for film in item.holders:
                 jdx = 2 + all_sections.index(film)
-                instances.write(idx + 1, jdx, 'X')
+                instances.write(idx, jdx, 'X')
         import time
         book.save('SHARE_Unique_Items_To_Code_%s.xls' % time.strftime('%Y%m%d'))
             
@@ -496,10 +573,10 @@ class CodeExtractor(object):
                 if si(row[0]).lower() == 'variable name':
                     headers = [si(x) for x in row]
                     couples = self.extract_code_couples(headers)
-                    #print 'Headers: %s' % headers
+                    # print 'Headers: %s' % headers
                     # Found the row with the column headings
                     for this_row in sheet.rows[idx + 1:]:
-                        if this_row[0] == '' or this_row[0] is None:
+                        if si(this_row[0]) == '' or si(this_row[0]) is None:
                             continue
                         _content = dict(zip(headers, [si(x) for x in this_row]))
                         _name = _content.get('Variable Name')
