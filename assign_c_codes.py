@@ -326,7 +326,7 @@ class CodeLoader(object):
             for (offset, row) in enumerate(sheet.rows, 1):
                 if not si(row[0]):
                     # blank rows
-≈                    continue
+                    continue
                 # look where to start coding
                 if si(row[0]).lower() == 'variable name':
                     # Found the row with the column headings
