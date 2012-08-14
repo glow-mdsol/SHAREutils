@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 import os, sys
+import glob
+
 """
 XML Spreadsheet format
 """
@@ -294,7 +296,7 @@ class CodeLoader(object):
                    
     def dump_map(self, filename):
         coded_columns = MAPPING_CODES.keys()
-        boldtype = xlwt.easyxf("font: bold on; align: wrap on, vert center, horiz center; borders: left 1, top 1, bottom 1, right 1;")
+        boldtype = xlwt.easyxf("font: bold on; align: wrap on, vert top, horiz center; borders: left 1, top 1, bottom 1, right 1;")
         borderedtype = xlwt.easyxf("borders: left 1, top 1, bottom 1, right 1; align: vert top, horiz left;")
         try:
             coded = xlwt.Workbook()
@@ -309,6 +311,8 @@ class CodeLoader(object):
             print 'Failed to open %s : %s' % (filename, e)
             traceback.print_tb(sys.exc_info()[2])
             return
+        # flag for refresh
+        DIRTY = []
         for sheet_name in workbook.get_sheet_names():
             if ('Rules' in sheet_name or 
                 'Decision' in sheet_name or 
@@ -322,13 +326,15 @@ class CodeLoader(object):
             for (offset, row) in enumerate(sheet.rows, 1):
                 if not si(row[0]):
                     # blank rows
-                    continue
+≈                    continue
                 # look where to start coding
                 if si(row[0]).lower() == 'variable name':
                     # Found the row with the column headings
                     headers = [si(x) for x in row]
+                    # filter the coded_columns on columns where the coded column exists in the dataset
+                    filtered_columns = filter(lambda x: MAPPING_CODES.get(x) in headers, coded_columns)
                     # Define the mapped headers
-                    overlap = sorted(set(headers).intersection(set(coded_columns)), cmp=self.column_sort)
+                    overlap = sorted(set(headers).intersection(set(filtered_columns)), cmp=self.column_sort)
                     # Write the headers for the coded columns
                     for (idx, col) in enumerate(overlap, 1):
                         coded_tab.write(0, idx, MAPPING_CODES.get(col), boldtype)
@@ -347,13 +353,21 @@ class CodeLoader(object):
                                     # Multi-value columns
                                     terms = [x.strip() for x in mapped_content.get(col).split('|')]
                                     codes = [self.terminology.get(x, '') for x in terms]
-                                    coded_tab.write(offset_row, idx,
-                                                    ' | '.join(codes), borderedtype)
+                                    proposed = ' | '.join(codes)
                                 else:
-                                    coded_tab.write(offset_row, idx,
-                                                    self.terminology.get(mapped_content.get(col, ""), ''), borderedtype)
-        coded.save("%s_CODED.xls" % (os.path.splitext(filename)[0]))
-
+                                    proposed = self.terminology.get(mapped_content.get(col, ""), '')
+                                # check and see if the code to be assigned, is already assigned so we don't have to do so
+                                # much work ;-)
+                                if mapped_content.get(MAPPING_CODES.get(col)) != proposed:
+                                    DIRTY.append("Sheet: %s; Variable: %s; Column %s" % (sheet_name, mapped_content.get('Variable Name'), col))
+                                coded_tab.write(offset_row, idx, proposed, borderedtype)
+                            else:
+                                coded_tab.write(offset_row, idx, '', borderedtype)
+        if len(DIRTY) != 0:
+            print "Content to be updated:"
+            print "\n".join(DIRTY)
+            coded.save("%s_CODED.xls" % (os.path.splitext(filename)[0]))
+            
 def template_sort(x, y):
     """
     Custom sort for Content Templates
@@ -423,7 +437,7 @@ class CodeExtractor(object):
         tocode.write(0, 1, "Code", boldtype)
         idx = 1
         for item in all_items:
-            if item.uncoded:
+            if item.uncoded or item.new:
                 tocode.write(idx, 0, item.name)
                 idx = idx + 1
         """
@@ -689,6 +703,10 @@ class CodedEntry(object):
         return False
 
     @property
+    def new(self):
+        return "CNEW" in self.code.values()
+            
+    @property
     def coded(self):
         """
         Single code
@@ -726,7 +744,7 @@ if __name__ == "__main__":
                       dest='reference',
                       default='')
     parser.add_option('-t',
-                      help="Template File",
+                      help="Template File (Populated with Terminology)",
                       metavar='FILE',
                       action='store',
                       dest='template',
@@ -744,9 +762,9 @@ if __name__ == "__main__":
     if not ((opts.reference != '') ^ (opts.template != '')):
         sys.exit()
     tk = CodeLoader(opts)
-    for arg in args:
-        if not os.path.splitext(arg)[1] in ['.xls', '.xlsx']:
-            print 'Skipping %s' % arg
-        print 'Generating %s' % arg
-        tk.dump_map(arg)
+    for template in glob.glob("*Template.xlsx"):
+        if template.startswith("~"):
+            continue
+        print 'Generating %s' % template
+        tk.dump_map(template)
 
