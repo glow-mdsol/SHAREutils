@@ -151,6 +151,9 @@ MUSTVALORNA = {u'Mapping to BRIDG Defined Class' : True,
                u'Description of Observation, ObservationResult or Activity or Relationship - NON-CODED VALUES' : True
                }
 
+MUTEX = [( u'Description of Observation, ObservationResult or Activity or Relationship - CODED VALUES',
+           u'Description of Observation, ObservationResult or Activity or Relationship - NON-CODED VALUES')]
+
 def columnify(set_of_columns):
     """
     return a dict with the column indicies (per Excel)
@@ -208,15 +211,25 @@ class ContentSheetChecker(object):
                 for (idx, colname) in enumerate(["Sheet", "Field", "Column", "Issue"], 1):
                     col_letter = get_column_letter(idx)
                     _cell = sheet.cell("%s1" % col_letter)
-                    _cell.value = colname
                     _cell.style.font.name = 'Arial'
                     _cell.style.font.size = 12
                     _cell.style.font.bold = True
+                    _cell.style.alignment.vertical = openpyxl.style.Alignment.VERTICAL_TOP
+                    _cell.style.alignment.wrap_text = True
+                    _cell.value = colname
                 for (row_idx, exc_item) in enumerate(exceptions, 2):
                     for (col_idx, field) in enumerate(exc_item, 1):
                         _cell = sheet.cell("%s%s" % (get_column_letter(col_idx), row_idx))
                         _cell.value = field
-            report.save("Content_Template_Check_%s.xlsx" % time.strftime("%Y-%b-%d"))
+                for column in range(1, 5):
+                    if column in [1, 4]:
+                        width = "30"
+                    elif column in [2]:
+                        width = 15
+                    elif column in [3]:
+                        width = 75
+                    sheet.column_dimensions[get_column_letter(column)].width = width
+            report.save("Content_Template_Check_%s.xlsx" % time.strftime("%Y-%m-%d"))
                     
         else:
             print "Nothing to report"
@@ -312,21 +325,31 @@ class ContentSheetChecker(object):
                                 if row.get(dep) == depval:
                                     self.log(row.get('Variable Name'),
                                              column,
-                                        "Column must be set but is not - based on dependency of %s having value %s" % (dep, depval))
+                                        "Column must be set but is not - based on dependency of '%s' having value %s" % (dep, depval))
                                 elif (depval == "SET" and row.get(dep) != ""):
                                     self.log(row.get('Variable Name'),
                                              column,
-                                        "Column must be set but is not - based on dependency of %s having value %s" % (dep, depval))
+                                        "Column must be set but is not - based on dependency of '%s' having value %s" % (dep, depval))
                             elif isinstance(dep, list):
                                 if depval == "SET":
                                     assigned = [row.get(x) for x in dep]
                                     if assigned.count("") == len(assigned):
                                         self.log(row.get('Variable Name'),
                                                  column,
-                                                 "Column must be set but is not - based on dependency of %s having value %s" % (dep, depval) )
+                                                 "Column must be set but is not - based on dependency of '%s' having value %s" % (','.join(dep), depval) )
                                         
-                                        
-
+    def _run_set_or_na_check(self, row):
+        """
+        Check that field is set or NA
+        """
+        for (column, content) in row.iteritems():
+            if MUSTVALORNA.get(column, False) == True:
+                if content == "":
+                    self.log(row.get('Variable Name'),
+                             column,
+                        "Column must be set to value or na")
+        
+        
     def _run_not_set_check(self, row):
         """
         Check that a column is not set
@@ -342,6 +365,9 @@ class ContentSheetChecker(object):
         """
         Check that at least one of the BRIDG columns are set
         """
+        if len(filter(lambda x: 'BRIDG' in x, row.keys())) == 0:
+            # No BRIDG Columns
+            return
         for colname in filter(lambda x: 'BRIDG' in x, row.keys()):
             if row.get(colname) != "":
                 return
@@ -361,7 +387,6 @@ class ContentSheetChecker(object):
                     "Expected Coding is missing")
     
 if __name__ == "__main__":
-    content_re = re.compile(".*Template\.xls(x)?")
     checker = ContentSheetChecker()
     for candidate in glob.glob("*.xls") + glob.glob("*.xlsx"):
         if '~' in candidate:
