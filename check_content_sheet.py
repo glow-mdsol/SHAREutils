@@ -246,7 +246,7 @@ class ContentSheetChecker(object):
             return
         for sheet_name in workbook.get_sheet_names():
             sheet = workbook.get_sheet_by_name(sheet_name)
-            if sheet.cell("A1").value.upper() != "BRIDG VERSION":
+            if sheet.cell("A1").value.upper() not in ["BRIDG VERSION", "CONCEPT"]:
                 # Only look at those with a BRIDG Version top left
                 continue
             self.sheet = sheet_name
@@ -260,7 +260,7 @@ class ContentSheetChecker(object):
             elif si(row[0]).upper() == "BRIDG VERSION":
                 if not (si(row[1]) == BRIDG_VERSION or si(row[2]) == BRIDG_VERSION):
                     self.log("", si(row[0]), "BRIDG Version not set or not equal to %s" % BRIDG_VERSION)
-            elif si(row[0]).upper() == "DOMAIN":
+            elif si(row[0]) == "Domain":
                 if si(row[1]) == "":
                     self.log("", si(row[0]), "Domain not set")
             elif si(row[0]).upper() == "VARIABLE NAME":
@@ -290,20 +290,40 @@ class ContentSheetChecker(object):
                     func = getattr(self, checkname)
                     func(mapped)
 
+    def _run_check_bridg_is_set(self, row):
+      """
+      Check that at least one BRIDG attribute is set (except for DOMAIN)
+      """
+      # isolate BRIDG columns
+      cols = [x for x in row.keys() if x.startswith("Mapping to BRIDG")]
+      if len(cols) == 0:
+        return
+      set_values = [row.get(x) for x in cols if row.get(x) != ""]
+      if len(set_values) == 0:
+        self.log(row.get("Variable Name"),
+                        "BRIDG Mappings",
+                        "No BRIDG Mapping currently assigned to %s" % row.get('Variable Name'))
+        
+      
     def _run_check_copying_from_generic(self, row):
         """
         Check that all fields in the Concept Tabs are represented in the Generic Tab
         """
         if not 'GENERIC' in self.sheet.upper():
             try:
-                
                 if not row.get('Variable Name') in self.template_vars.get(self.template):
                     self.log(row.get("Variable Name"),
                              "Variable name",
                         "Variable %s is in a Concept Tab, but not in the Generic Tab" % row.get('Variable Name'))
             except TypeError:
                 print "Template Vars: %s" % self.template_vars.get(self.template)
-                
+    
+    def _run_check_bridg_attributes_classes(self, row):
+      """
+      Check that the BRIDG classes/attributes are valid values
+      """
+      pass
+                  
     def _run_set_check(self, row):
         """
         Checks that a column is populated when it should be
@@ -361,21 +381,6 @@ class ContentSheetChecker(object):
                              column,
                         "Column is set when it shouldn't be")
                 
-    def _run_check_for_trolls(self, row):
-        """
-        Check that at least one of the BRIDG columns are set
-        """
-        if len(filter(lambda x: 'BRIDG' in x, row.keys())) == 0:
-            # No BRIDG Columns
-            return
-        for colname in filter(lambda x: 'BRIDG' in x, row.keys()):
-            if row.get(colname) != "":
-                return
-        else:
-            self.log(row.get('Variable Name'),
-                     "BRIDG",
-                "No BRIDG columns set")
-
     def _run_check_coding_columns(self, row):
         """
         Check that all codable elements have been coded
