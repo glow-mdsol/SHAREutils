@@ -7,6 +7,10 @@ import glob
 XML Spreadsheet format
 """
 import openpyxl
+from openpyxl import workbook
+from openpyxl.cell import get_column_letter
+from openpyxl.style import Color, Fill, Alignment
+
 """
 BIFF Spreadsheet format
 """
@@ -305,7 +309,7 @@ class CodeLoader(object):
             sys.exit()
             # Office 2003 or later xml format
         try:
-            workbook = openpyxl.reader.excel.load_workbook(filename)
+            workbook = openpyxl.load_workbook(filename)
         except Exception, e:
             import traceback
             print 'Failed to open %s : %s' % (filename, e)
@@ -359,21 +363,30 @@ class CodeLoader(object):
                                 # check and see if the code to be assigned, is already assigned so we don't have to do so
                                 # much work ;-)
                                 if mapped_content.get(MAPPING_CODES.get(col)) != proposed:
-                                    DIRTY.append("Sheet: %s; Variable: %s; Column %s" % (sheet_name, mapped_content.get('Variable Name'), col))
+                                    # TODO: update the code in the scanned sheet here!
+                                    target = sheet.cell("%s%s" % (get_column_letter(headers.index(MAPPING_CODES.get(col))), offset_row + offset))
+                                    target.style.alignment.vertical = Alignment.VERTICAL_TOP
+                                    target.value = proposed
+                                    DIRTY.append("Sheet: %s; Variable: %s; Column %s was updated" % (sheet_name, mapped_content.get('Variable Name'), col))
                                 coded_tab.write(offset_row, idx, proposed, borderedtype)
                             else:
                                 coded_tab.write(offset_row, idx, '', borderedtype)
         if len(DIRTY) != 0:
             print "Content to be updated:"
             print "\n".join(DIRTY)
+            workbook.save("%s_WITH_CODES.xls" % (os.path.splitext(filename)[0]))
             coded.save("%s_CODED.xls" % (os.path.splitext(filename)[0]))
             
 def template_sort(x, y):
     """
     Custom sort for Content Templates
     """
-    (dx, tx) = x.split()[:2]
-    (dy, ty) = y.split()[:2]
+    try:
+      (dx, tx) = x.split()[:2]
+      (dy, ty) = y.split()[:2]
+    except ValueError:
+      print "Error on template sort for: %s %s" % (x, y)
+      sys.exit()
     # Generic for both
     if len(tx) > 2 and len(ty) > 2:
         return cmp(tx, ty)
@@ -387,6 +400,12 @@ def template_sort(x, y):
     else:
         return cmp(tx, ty)
 
+OBS_CLASS = {"INTERVENTIONS" : ["EX", "CM", "SU"],
+              "FINDINGS" : ["EG", "IE", "LB", "PE", "QS", "SC",
+               "VS", "MS", "MB", "DA", "PC", "PP"],
+              "EVENTS" : ["AE", "DS", "MH", "DV", "CE"],
+              "SPECIALPURPOSE" : ["DM", "SV", "SE", "CO"]}
+              
 class CodeExtractor(object):
     """
     Extract Items that need to be coded out
@@ -402,8 +421,10 @@ class CodeExtractor(object):
             import glob
             xlfiles = glob.glob("*Template.xls*")
         for xlfile in xlfiles:
+            # no temp files
             if xlfile.startswith('~'):
                 continue
+            # fence btw biff-based and XML-based
             if os.path.splitext(xlfile)[1] == ".xlsx":
                 self._load_template_xml(xlfile)
             else:
@@ -485,6 +506,8 @@ class CodeExtractor(object):
             for film in item.holders:
                 jdx = 2 + all_sections.index(film)
                 instances.write(idx, jdx, 'X')
+        for (obsclass, domain) in OBS_CLASS.iteritems():
+          pass
         import time
         book.save('SHARE_Unique_Items_To_Code_%s.xls' % time.strftime('%Y%m%d'))
             
@@ -651,7 +674,7 @@ class CodedEntry(object):
                 return
             if current != _code:
                 print "Redefinition of %s" % self.name
-                # do something
+                    # do something
                 spl = current.split(',')
                 if not _code in spl:
                     spl.append(_code)
