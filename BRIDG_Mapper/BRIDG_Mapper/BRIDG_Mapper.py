@@ -1,4 +1,3 @@
-
 import win32com.client
 import os
 import sys
@@ -107,6 +106,16 @@ class BRIDGMappingSheetLoader(object):
     cPickle.dump(dataset, bridg_pickle)
     bridg_pickle.close()
 
+  def load_from_pickle(self, filename):
+    if not os.path.exists(filename):
+      print "Can't find store file"
+      sys.exit()
+    try:
+      dataset = cPickle.load(open(filename, 'rb'))
+    except IOError:
+      print "Error loading dataset"
+      sys.exit()
+       
 
 class Mapped_Specification_source(object):
 
@@ -139,14 +148,38 @@ class Mapped_Specification_row(object):
     self.custom = custom
     self.mapping_tag_value = mapping_tag_value
   
+  @property
+  def general_name(self):
+    """
+    Turn the element name with the domain included into a generic name
+    by substituting the domain with --
+    """
+    if self.mapped_element_name.startswith(self.mapped_group_name):
+      return "--" + self.mapped_element_name[len(self.mapped_group_name):]
+    return self.mapped_element_name
+    
 class BRIDGMapping(object):
 
   def __init__(self, options={}):
     self.options = options
     self.rows = []
-
+    self._domains = {}
+    
+  @property
+  def domains(self):
+    return self._domains
+    
   def add_row(self, row):
     self.rows.append(MappingRow(row))
+    
+  def process_rows(self):
+    # map the elements across from rows to something we can use
+    for row in self.rows:
+      domain = self._domains.setdefault(row.domain, SDTMDomain(row.domain))
+      domain.add_variable(row.element, 
+                          row.bridg_attributes,
+                          row.status)
+  
 
 class MappingRow(object):
 
@@ -228,6 +261,12 @@ class MappingRow(object):
   def bridg_revised_name(self):
     return self.data.get("BRIDG Revised Name", "")
 
+  @property
+  def bridg_attributes(self):
+    return {"BRIDG Class" : self.bridg_class_name,
+            "BRIDG Element" : self.bridg_element_name,
+            "BRIDG Data Type" : self.bridg_data_type}
+
 class BRIDG_Source(object):
 
   def __init__(self, options={}):
@@ -304,7 +343,15 @@ class BRIDG_Class(BRIDG_Super):
     self.specializations = []
     self.generalizations = []
     self.associations = []
-
+  
+  @property
+  def generalises(self):
+    return self.generalizations
+  
+  @property 
+  def associates(self):
+    return self.associations
+    
   def add_attribute(self, data):
     self.attributes[data["BRIDG class element name"]] = BRIDG_Class_Element(data["BRIDG class element name"],
                                                                             data["Element Type"],
@@ -318,7 +365,6 @@ class BRIDG_Class(BRIDG_Super):
     # TBC
     #assoc_re = re.compile("^(.+)\((.+)\)$")
     #(attribute, classname) = assoc_re.match(data["BRIDG class element name"]).groups()
-
     self.associations.append(data)
 
   def add_generalization(self, data):
@@ -345,8 +391,62 @@ class BRIDG_Class_Element(BRIDG_Super):
   def _derive_constraints(self, contstraints):
     return []
 
+class SDTMDomain(object):
+  
+  def __init__(self, name):
+    self.name = name
+    self._elements = []
+      
+  @property 
+  def variables(self):
+    return self._elements
+
+  def add_variable(self, element_name, bridg_attr, status):
+    self._elements.append(SDTMVariable(element_name, 
+                                        bridg_attr, 
+                                        status))
+
+class SDTMVariable(object):
+  
+  def __init__(self, name, bridg_attributes={}, status=""):
+    self.name = name
+    self.bridg_attributes = bridg_attributes
+    self.status = status
+
+  @property
+  def mapped(self):
+    return self.bridg_class != ""
+
+  @property
+  def bridg_class(self):
+    return self.bridg_attributes.get("BRIDG Class", "")
+
+  @property
+  def bridg_attribute(self):
+    return self.bridg_attributes.get("BRIDG Element", "")
+    
+  @property
+  def bridg_datatype(self):
+    return self.bridg_attributes.get("BRIDG Data Type", "")
+  
 
 if __name__ == "__main__":
+  import optparse
+  Parser = optparse.OptionParser()
+  Parser.add_option("-t", "--load-templates", dest="load_template", default=False, 
+                    action="store_true", help="Load data from the template")
+  Parser.add_option("-p", "--load-pickle", dest="load_pickle", default=False, 
+                    action="store_true", help="Load data from the pickle") 
+  (opts, args) = Parser.parse_args
+  
+  if opts.load_template ^ opts.load_pickle:
+    Parser.print_help()
+    sys.exit()
+  if len(args) != 0:
+    Parser.print_help()
+    sys.exit()
   loader = BRIDGMappingSheetLoader()
-  loader.load_template(sys.argv[1])
-
+  if opts.load_template:
+    loader.load_template(args[0])   
+  else: 
+    loader.load_from_pickle(args[0]) 
